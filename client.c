@@ -26,8 +26,18 @@ void communication( void )
 		bzero(buff, sizeof(buff));
 		printf("Enter the command: ");
 		n = 0;
-		while (n < BUF_CAPACITY - 1 && (buff[n] = getchar()) != '\n')
+		while (n < BUF_CAPACITY - 1) 
+		{
+			buff[n] = getchar();
+			if (buff[n] == '\n')
+				break ;	
+			else if (buff[n] == EOF)
+			{
+				close(sockfd);
+				exit(0);
+			}
 			n++;
+		}
 		buff[n] = 0;
 		splitted = split(buff, ' ');
 		if (!splitted)
