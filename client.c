@@ -24,7 +24,7 @@ void communication( void )
 	sockfd = 0;
 	while (1) {
 		bzero(buff, sizeof(buff));
-		printf("Enter the string : ");
+		printf("Enter the command: ");
 		n = 0;
 		while (n < BUF_CAPACITY - 1 && (buff[n] = getchar()) != '\n')
 			n++;
@@ -96,7 +96,7 @@ void communication( void )
 				}
 				else
 					buff[BUF_CAPACITY - 1] = 0;
-				printf("From Server:\n%s\n", buff);
+				printf("%s\n", buff);
 			}
 		}
 		else
