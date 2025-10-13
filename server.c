@@ -12,6 +12,13 @@
 #define BUF_CAPACITY	1000
 #define READ_SIZE		200
 
+typedef enum error_codes_t
+{
+	SUCCESS = 0,
+	DISCONNECT,
+	ERROR
+} error_codes_t;
+
 char	**split(char *, char);
 void	free_2d_array(char **);
 
@@ -30,7 +37,6 @@ int	run_shell_command(char *full_command, char (*response)[BUF_CAPACITY])
 		return (2);
 	while (fgets(*response + strlen(*response), BUF_CAPACITY, fp))
 		;
-	// printf ("%s\n", *response);
 	return (0);
 }
 
@@ -47,14 +53,14 @@ int	parse_command(data_t *client)
 		ret_code = 1;
 	else if (splitted[0] && strcmp(splitted[0], "shell") == 0)
 	{
-		if (!splitted[1] || splitted[1][0] != '"' )
+		if (!splitted[1] || splitted[1][0] != '"')
 			ret_code = 2;
 		else
 		{
 			int	i;
-			int	from_start = 0;
-			// int	to_par;
-			// int	from_end = strlen(splitted[1]) - 1;
+			int	from_start;
+
+			from_start = 0;
 			for (i = 0; client->request[i] && client->request[i] != '"'; ++i)
 				from_start++;
 			for (i = from_start + 1; client->request[i] && client->request[i] != '"'; ++i)
@@ -64,7 +70,7 @@ int	parse_command(data_t *client)
 			else
 			{
 				client->request[i] = 0;
-				printf ("sedning to execute '%s'\n", client->request + from_start + 1);
+				// printf ("sedning to execute '%s'\n", client->request + from_start + 1);
 				run_shell_command(client->request + from_start + 1, &client->response);
 			}
 		}
@@ -152,9 +158,7 @@ int main()
 		{
 			if (FD_ISSET(fd, &read_fds))
 			{
-				printf ("fd is '%d'\n", fd);
 				bzero(clients[fd].request, BUF_CAPACITY);
-				bzero(clients[fd].response, BUF_CAPACITY);
 				int read_cnt = recv(fd, clients[fd].request, BUF_CAPACITY, 0);
 				if (read_cnt <= 0)
 				{
@@ -164,41 +168,30 @@ int main()
 					continue ;
 				}
 				clients[fd].request[read_cnt] = 0;
-				printf ("received '%s'\n", clients[fd].request);
+				bzero(clients[fd].response, BUF_CAPACITY);
 				int	ret_code = parse_command(&clients[fd]);
-				// switch (ret_code)
-				// {
-				// 	case 1:
-				// 		printf ("CLient disconendted\n");
-				// 		FD_CLR(fd, &master_read_fds);
-				// 		FD_CLR(fd, &master_write_fds);
-				// 		FD_CLR(fd, &master_exception_fds);
-				// 		close(fd);
-				// 		continue ;
-				// }
-				printf ("ret is %d\n", ret_code);
+				switch (ret_code)
+				{
+					case 1:
+					printf ("CLient %d disconnected\n", fd);
+					FD_CLR(fd, &master_read_fds);
+					close(fd);
+					continue ;
+				}
 				if (ret_code == 1)
 				{
-					printf ("CLient disconendted\n");
+					printf ("CLient %d disconnected\n", fd);
 					FD_CLR(fd, &master_read_fds);
 					close(fd);
 					continue ;
 				}
 				else
 				{
-					printf ("buf is '%s'\n", clients[fd].response);
+					// printf ("buf is '%s'\n", clients[fd].response);
 					if (ret_code == 2 || !clients[fd].response[0])
-						strcpy(clients[fd].response, "Error in executing");
+					strcpy(clients[fd].response, "Error in executing");
 					int ret = send(fd, clients[fd].response, strlen(clients[fd].response), 0);
-					printf ("send value : %d\n", ret);
 				}
-				// while (read_cnt > 0 && buf_len < BUF_CAPACITY - 1)
-				// {
-				// 	read_cnt = read(fd, buf + read_cnt, READ_SIZE);
-				// 	buf_len += read_cnt;
-				// }
-				// buf[buf_len] = 0;
-				printf ("buf is '%s'\n", clients[fd].response);
 			}
 		}
 	}

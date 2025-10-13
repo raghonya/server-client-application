@@ -10,40 +10,72 @@
 #include <unistd.h> // read(), write(), close()
 #include <sys/select.h>
 #include <sys/socket.h>
+#include <sys/socketvar.h>
 
-#define MAX 100
+#define BUF_CAPACITY 1000
 #define PORT 7747
 // #define SA struct sockaddr
 
 char	**split(char *, char);
 void	free_2d_array(char **);
 
+int	check_socket_connection(int sockfd)
+{
+	int			error;
+	socklen_t	len;
+	int			ret_code;
+	int			retval;
+	
+	error = 1;
+	ret_code = 0;
+	len = sizeof(error);
+	retval = getsockopt (sockfd, SOL_SOCKET, SO_ERROR, &error, &len);
+	// if (retval != 0)
+	// {
+	// 	printf("Error getting socket error code: %s\n", strerror(retval));
+	// 	ret_code = 1;
+	// }
+	if (error != 0)
+	{
+		printf("Socket disconnected: %s\n", strerror(error));
+		ret_code = 1;
+	}
+	return (ret_code);
+}
+
 void communication( void )
 {
 	int		sockfd;
-	char    buff[MAX];
+	char    buff[BUF_CAPACITY];
 	int     n;
 	char    **splitted;
 
+	sockfd = 0;
 	while (1) {
 		bzero(buff, sizeof(buff));
 		printf("Enter the string : ");
 		n = 0;
-		while (n < MAX - 1 && (buff[n] = getchar()) != '\n')
+		while (n < BUF_CAPACITY - 1 && (buff[n] = getchar()) != '\n')
 			n++;
 		buff[n] = 0;
-		// char	*pbuff = buff;
-		// while (*p && isspace(*p))
-		// 	pbuff++;
-		//////// i forget what to do
 		splitted = split(buff, ' ');
 		if (!splitted)
+		{
+			printf ("Allocation failure\n");
 			continue ;
+		}
 		if (splitted[0] && strcmp(splitted[0], "connect") == 0)
 		{
 			struct sockaddr_in	servaddr;
 			char				tmp_buf[30];
 
+			// if (check_socket_connection(sockfd) == 0)
+			if (send(sockfd, NULL, 0, MSG_NOSIGNAL) >= 0)
+			{
+				printf ("Already connected to the server\n");
+				free_2d_array(splitted);
+				continue ;
+			}
 			if (!splitted[1] || !splitted[2] || inet_pton(AF_INET, splitted[1], tmp_buf) == 0)
 			{
 				printf ("Invalid arguments\n");
@@ -54,7 +86,7 @@ void communication( void )
 			// socket create and verification
 			sockfd = socket(AF_INET, SOCK_STREAM, 0);
 			if (sockfd == -1) {
-				printf("socket creation failed\n");
+				printf("Socket creation failed\n");
 				free_2d_array(splitted);
 				continue ;
 			}
@@ -76,27 +108,24 @@ void communication( void )
 				continue ;
 			}
 			else printf("Connected to the server\n");
-			printf ("ERRNO: %d\n", errno);
 		}
 		else if (splitted[0] && \
 			(strcmp(splitted[0], "disconnect") == 0 || strcmp(splitted[0], "shell") == 0))
 		{
-			printf ("sendbuf: '%s'\n", buff);
 			if (send(sockfd, buff, strlen(buff), MSG_NOSIGNAL) < 0)
-			{
 				printf ("Youre not connected\n");
-				// continue ;
-			}
 			else
 			{
 				bzero(buff, sizeof(buff));
-				int ret_recv = recv(sockfd, buff, sizeof(buff), MSG_NOSIGNAL);
-				printf ("sendaaaaa: '%d'\n", ret_recv);
-				if (ret_recv < 0)
+				int recv_ret = recv(sockfd, buff, BUF_CAPACITY, MSG_NOSIGNAL);
+				// printf ("%d\n", recv_ret);
+				if (recv_ret <= 0)
 				{
 					printf ("Connection lost\n");
-					// continue ;
+					close(sockfd);
 				}
+				else
+					buff[recv_ret - 1] = 0;
 				printf("From Server` \n%s\n", buff);
 			}
 		}
