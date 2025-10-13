@@ -167,17 +167,9 @@ int main()
 					close(fd);
 					continue ;
 				}
-				clients[fd].request[read_cnt] = 0;
+				clients[fd].request[BUF_CAPACITY - 1] = 0;
 				bzero(clients[fd].response, BUF_CAPACITY);
 				int	ret_code = parse_command(&clients[fd]);
-				switch (ret_code)
-				{
-					case 1:
-					printf ("CLient %d disconnected\n", fd);
-					FD_CLR(fd, &master_read_fds);
-					close(fd);
-					continue ;
-				}
 				if (ret_code == 1)
 				{
 					printf ("CLient %d disconnected\n", fd);
@@ -189,8 +181,10 @@ int main()
 				{
 					// printf ("buf is '%s'\n", clients[fd].response);
 					if (ret_code == 2 || !clients[fd].response[0])
-					strcpy(clients[fd].response, "Error in executing");
-					int ret = send(fd, clients[fd].response, strlen(clients[fd].response), 0);
+						strcpy(clients[fd].response, "Error in executing");
+					
+					clients[fd].response[BUF_CAPACITY - 1] = 0;
+					send(fd, clients[fd].response, strlen(clients[fd].response), 0);
 				}
 			}
 		}

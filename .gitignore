@@ -1,4 +1,6 @@
 main.c
+server
+client
 
 # Prerequisites
 *.d

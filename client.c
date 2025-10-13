@@ -1,47 +1,18 @@
-#include <arpa/inet.h> // inet_addr()
-#include <netdb.h>
+#include <arpa/inet.h>
 #include <ctype.h>
-#include <errno.h>
-#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h> // bzero()
-#include <unistd.h> // read(), write(), close()
+#include <unistd.h>
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/socketvar.h>
 
 #define BUF_CAPACITY 1000
 #define PORT 7747
-// #define SA struct sockaddr
 
 char	**split(char *, char);
 void	free_2d_array(char **);
-
-int	check_socket_connection(int sockfd)
-{
-	int			error;
-	socklen_t	len;
-	int			ret_code;
-	int			retval;
-	
-	error = 1;
-	ret_code = 0;
-	len = sizeof(error);
-	retval = getsockopt (sockfd, SOL_SOCKET, SO_ERROR, &error, &len);
-	// if (retval != 0)
-	// {
-	// 	printf("Error getting socket error code: %s\n", strerror(retval));
-	// 	ret_code = 1;
-	// }
-	if (error != 0)
-	{
-		printf("Socket disconnected: %s\n", strerror(error));
-		ret_code = 1;
-	}
-	return (ret_code);
-}
 
 void communication( void )
 {
@@ -118,15 +89,14 @@ void communication( void )
 			{
 				bzero(buff, sizeof(buff));
 				int recv_ret = recv(sockfd, buff, BUF_CAPACITY, MSG_NOSIGNAL);
-				// printf ("%d\n", recv_ret);
 				if (recv_ret <= 0)
 				{
 					printf ("Connection lost\n");
 					close(sockfd);
 				}
 				else
-					buff[recv_ret - 1] = 0;
-				printf("From Server` \n%s\n", buff);
+					buff[BUF_CAPACITY - 1] = 0;
+				printf("From Server:\n%s\n", buff);
 			}
 		}
 		else
