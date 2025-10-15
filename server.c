@@ -7,9 +7,10 @@
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <pthread.h>
 
 #define PORT			7744
-#define BUF_CAPACITY	1000
+#define BUF_SIZE		100
 #define READ_SIZE		200
 
 typedef enum error_codes_t
@@ -24,18 +25,19 @@ void	free_2d_array(char **);
 
 typedef struct data_t
 {
-	char	request[BUF_CAPACITY];
-	char	response[BUF_CAPACITY];
+	char	*request;
+	char	*response;
 } data_t;
 
-int	run_shell_command(char *full_command, char (*response)[BUF_CAPACITY])
+
+int	run_shell_command(char *full_command, char (*response)[BUF_SIZE])
 {
 	FILE	*fp;
 
 	fp = popen(full_command, "r");
 	if (!fp)
 		return (2);
-	while (fgets(*response + strlen(*response), BUF_CAPACITY, fp))
+	while (fgets(*response + strlen(*response), BUF_SIZE, fp))
 		;
 	return (0);
 }
@@ -79,15 +81,35 @@ int	parse_command(data_t *client)
 	return (ret_code);
 }
 
+void	*client_handler(void *p_socket)
+{
+	int		socket = *(int *)(p_socket);
+	int		read_cnt;
+	data_t	data;
+
+	data.request = malloc(sizeof(char) * (BUF_SIZE + 1));
+	while ((read_cnt = recv(socket, data.request, BUF_SIZE, MSG_NOSIGNAL)))
+	{
+
+	}
+}
+
 int main()
 {
 	int					server_socket;
-	int					max_fd;
-	fd_set				read_fds, master_read_fds;
-	fd_set				write_fds, master_write_fds;
-	fd_set				exception_fds, master_exception_fds;
 	struct sockaddr_in	servaddr;
-	data_t				clients[20];
+
+	struct sockaddr_in	cli;
+	socklen_t			cli_len;
+	data_t				clients[5];
+	int					client_socket;
+	pthread_mutex_t		client_count_mutex;
+	pthread_t			client_thread;
+	int					client_count;
+
+	client_count = 0;
+	cli_len = sizeof(cli);
+	pthread_mutex_init(&client_count_mutex, NULL);
 
 	bzero(&servaddr, sizeof(servaddr));
 	servaddr.sin_family = AF_INET;
@@ -102,6 +124,9 @@ int main()
 	}
 	else printf("Socket successfully created\n");
 
+	int	opt;
+	setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
 	if ((bind(server_socket, (struct sockaddr *)&servaddr, sizeof(servaddr))) != 0)
 	{
 		printf("socket bind failed\n");
@@ -114,80 +139,95 @@ int main()
 		printf("Listen failed\n");
 		exit(1);
 	}
-	max_fd = server_socket;
-	FD_ZERO(&master_read_fds);
-	FD_ZERO(&master_write_fds);
-	FD_ZERO(&master_exception_fds);
-	FD_SET(server_socket, &master_read_fds);
-	while (max_fd + 1)
+	while ((client_socket = accept(server_socket, (struct sockaddr *)&cli, &cli_len)))
 	{
-		read_fds = master_read_fds;
-		write_fds = master_write_fds;
-		exception_fds = master_exception_fds;
 
-		int	ret = select(max_fd + 1, &read_fds, &write_fds, &exception_fds, NULL /*timeout*/);
-		if (ret == 0)
+		if (client_socket < 0)
 		{
-			printf ("Timeout\n");
+			printf ("Accept error\n");
 			continue ;
 		}
-		else if (ret < 0)
+		pthread_mutex_lock(&client_count_mutex);
+		if (client_count > 5)
 		{
-			printf ("Socket error\n");
+			printf ("Server supports only 5 clients at once, try connecting later\n");
+			send(client_socket, "Busy", 4, MSG_NOSIGNAL);
+			clsoe(client_socket);
+			pthread_mutex_unlock(&client_count_mutex);
 			continue ;
 		}
-		if (FD_ISSET(server_socket, &read_fds))
+		client_count++;
+		pthread_mutex_unlock(&client_count_mutex);
+
+		int		*new_client_socket = malloc(sizeof(int));
+		if (!new_client_socket)
 		{
-			struct sockaddr_in	cli;
-			socklen_t			cli_len;
-			int					client_socket;
+			printf ("Malloc error\n");
+			close(client_socket);
+			continue ;
+		}
+		pthread_create(&client_thread, NULL, &client_handler, &new_client_socket);
+		pthread_detach(&client_thread);
+		// int	ret = select(max_fd + 1, &read_fds, &write_fds, &exception_fds, NULL /*timeout*/);
+		// if (ret == 0)
+		// {
+		// 	printf ("Timeout\n");
+		// 	continue ;
+		// }
+		// else if (ret < 0)
+		// {
+		// 	printf ("Socket error\n");
+		// 	continue ;
+		// }
+		// if (FD_ISSET(server_socket, &read_fds))
+		// {
 			
-			cli_len = sizeof(cli);	
-			client_socket = accept(server_socket, (struct sockaddr *)&cli, &cli_len);
-			if (client_socket < 0)
-				printf ("Accept failed\n");
-			else
-			{
-				printf ("New client connected with socket %d\n", client_socket);
-				FD_SET(client_socket, &master_read_fds);
-				max_fd = (max_fd >= client_socket) ? max_fd : client_socket;
-			}
-			continue ;
-		}
-		for (int fd = 3; fd < max_fd + 1; ++fd)
-		{
-			if (FD_ISSET(fd, &read_fds))
-			{
-				bzero(clients[fd].request, BUF_CAPACITY);
-				int read_cnt = recv(fd, clients[fd].request, BUF_CAPACITY, 0);
-				if (read_cnt <= 0)
-				{
-					printf ("Client %d disconnected\n", fd);
-					FD_CLR(fd, &master_read_fds);
-					close(fd);
-					continue ;
-				}
-				clients[fd].request[BUF_CAPACITY - 1] = 0;
-				bzero(clients[fd].response, BUF_CAPACITY);
-				int	ret_code = parse_command(&clients[fd]);
-				if (ret_code == 1)
-				{
-					printf ("CLient %d disconnected\n", fd);
-					FD_CLR(fd, &master_read_fds);
-					close(fd);
-					continue ;
-				}
-				else
-				{
-					// printf ("buf is '%s'\n", clients[fd].response);
-					if (ret_code == 2 || !clients[fd].response[0])
-						strcpy(clients[fd].response, "Error in executing");
+		// 	cli_len = sizeof(cli);	
+		// 	client_socket = accept(server_socket, (struct sockaddr *)&cli, &cli_len);
+		// 	if (client_socket < 0)
+		// 		printf ("Accept failed\n");
+		// 	else
+		// 	{
+		// 		printf ("New client connected with socket %d\n", client_socket);
+		// 		FD_SET(client_socket, &master_read_fds);
+		// 		max_fd = (max_fd >= client_socket) ? max_fd : client_socket;
+		// 	}
+		// 	continue ;
+		// }
+		// for (int fd = 3; fd < max_fd + 1; ++fd)
+		// {
+		// 	if (FD_ISSET(fd, &read_fds))
+		// 	{
+		// 		bzero(clients[fd].request, BUF_SIZE);
+		// 		int read_cnt = recv(fd, clients[fd].request, BUF_SIZE, 0);
+		// 		if (read_cnt <= 0)
+		// 		{
+		// 			printf ("Client %d disconnected\n", fd);
+		// 			FD_CLR(fd, &master_read_fds);
+		// 			close(fd);
+		// 			continue ;
+		// 		}
+		// 		clients[fd].request[BUF_SIZE - 1] = 0;
+		// 		bzero(clients[fd].response, BUF_SIZE);
+		// 		int	ret_code = parse_command(&clients[fd]);
+		// 		if (ret_code == 1)
+		// 		{
+		// 			printf ("CLient %d disconnected\n", fd);
+		// 			FD_CLR(fd, &master_read_fds);
+		// 			close(fd);
+		// 			continue ;
+		// 		}
+		// 		else
+		// 		{
+		// 			// printf ("buf is '%s'\n", clients[fd].response);
+		// 			if (ret_code == 2 || !clients[fd].response[0])
+		// 				strcpy(clients[fd].response, "Error in executing");
 					
-					clients[fd].response[BUF_CAPACITY - 1] = 0;
-					send(fd, clients[fd].response, strlen(clients[fd].response), 0);
-				}
-			}
-		}
+		// 			clients[fd].response[BUF_SIZE - 1] = 0;
+		// 			send(fd, clients[fd].response, strlen(clients[fd].response), 0);
+		// 		}
+		// 	}
+		// }
 	}
 
 }
