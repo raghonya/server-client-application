@@ -93,7 +93,9 @@ void communication( void )
 		else if (splitted[0] && \
 			(strcmp(splitted[0], "disconnect") == 0 || strcmp(splitted[0], "shell") == 0))
 		{
-			if (send(sockfd, buff, strlen(buff), MSG_NOSIGNAL) < 0)
+			int send_ret = send(sockfd, buff, strlen(buff), MSG_NOSIGNAL);
+			printf ("sendret: %d\n", send_ret);
+			if (send_ret < 0)
 				printf ("Youre not connected\n");
 			else
 			{
@@ -106,7 +108,7 @@ void communication( void )
 				}
 				else
 					buff[BUF_CAPACITY - 1] = 0;
-				printf("%s\n", buff);
+				printf("`%s`\n", buff);
 			}
 		}
 		else

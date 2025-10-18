@@ -1,7 +1,7 @@
 CC				=	cc
 SERVER_NAME		=	server
 CLIENT_NAME		=	client
-CFLAGS			=	-Wall -Wextra# -Werror
+CFLAGS			=	-pthread -Wall -Wextra# -Werror
 CFLAGS			+=	-g -fsanitize=address
 DEP				=	Makefile
 OBJDIR			=	obj
