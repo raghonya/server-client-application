@@ -1,5 +1,6 @@
 #include <arpa/inet.h>
 #include <ctype.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,8 +10,9 @@
 #include <sys/socket.h>
 #include <sys/socketvar.h>
 
-#define REQ_CAPACITY 2000
-#define RESP_CHUNK 512
+#define REQ_CAPACITY	2000
+#define RESP_CHUNK		512
+#define DELIM			"\r\n\t\f\v "
 
 char	**split(char *, char);
 void	free_2d_array(char **);
@@ -41,7 +43,10 @@ void communication( void )
 			}
 			n++;
 		}
-		request[n] = 0;
+		request[n] = ' ';
+		request[n + 1] = '\r';
+		request[n + 2] = '\n';
+		request[n + 3] = 0;
 		splitted = split(request, ' ');
 		if (!splitted)
 		{
@@ -53,7 +58,6 @@ void communication( void )
 			struct sockaddr_in	servaddr;
 			char				tmp_buf[30];
 
-			// if (check_socket_connection(sockfd) == 0)
 			if (send(sockfd, NULL, 0, MSG_NOSIGNAL) >= 0)
 			{
 				printf ("Already connected to the server\n");
@@ -68,7 +72,8 @@ void communication( void )
 			}
 			int	port = atoi(splitted[2]);
 			// socket create and verification
-			sockfd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
+			// sockfd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
+			sockfd = socket(AF_INET, SOCK_STREAM, 0);
 			if (sockfd == -1) {
 				printf("Socket creation failed\n");
 				free_2d_array(splitted);
@@ -97,52 +102,55 @@ void communication( void )
 		else if (splitted[0] && \
 			(strcmp(splitted[0], "disconnect") == 0 || strcmp(splitted[0], "shell") == 0))
 		{
+			if (send(sockfd, NULL, 0, MSG_NOSIGNAL) < 0)
+			{
+				printf ("Not connected to the server\n");
+				free_2d_array(splitted);
+				continue ;
+			}
 			int send_ret = send(sockfd, request, strlen(request), MSG_NOSIGNAL);
 			// printf ("sendret: %d\n", send_ret);
 			if (send_ret < 0)
 				printf ("Youre not connected\n");
 			else
 			{
-				response = malloc(sizeof(char) * (RESP_CHUNK + 1));
+				char	tmp_buf[RESP_CHUNK + 1];
+				int		recv_ret = 1;
+
+				response = malloc(sizeof(char));
 				if (!response)
 				{
 					printf ("Not enough memory\n");
 					close(sockfd);
 					continue ;
 				}
-				bzero(response, RESP_CHUNK + 1);
-				int recv_ret = recv(sockfd, response, RESP_CHUNK, MSG_NOSIGNAL);
-				if (recv_ret <= 0)
+				*response = 0;
+				while (strstr(response, "\r\n") == NULL)
 				{
-					printf ("Connection lost\n");
-					close(sockfd);
-					continue ;
-				}
-				// if (recv_ret == RESP_CHUNK)
-				// {
-				while (recv_ret > 0)
-				{
+					bzero(tmp_buf, RESP_CHUNK + 1);
+					recv_ret = recv(sockfd, tmp_buf, RESP_CHUNK, MSG_NOSIGNAL);
+					if (recv_ret < 0)
+					{
+						printf ("Connection lost\n");
+						free(response);
+						close(sockfd);
+						break ;
+					}
 					size_t	last_len = strlen(response);
+					char	*tmp = response;
 					response = realloc(response, last_len + recv_ret + 1);
 					if (!response)
 					{
-						printf ("Malloc error\n");
-						free(response);
+						printf ("Not enough memory\n");
+						free(tmp);
+						close(sockfd);
 						break ;
 					}
-					printf ("retval: %d\n", recv_ret);
-					recv_ret = recv(sockfd, response + last_len, RESP_CHUNK, MSG_NOSIGNAL);
-					printf ("after recv\n");
-					if (recv_ret < 0)
-					{
-						printf ("Connection closed\n");
-						free(response);
-						break ;	
-					}
-					response[last_len + recv_ret] = 0;
+					strcat(response, tmp_buf);
 				}
-				// }
-				printf("`%s`\n", response);
+				char *tmp = strstr(response, "\r\n");
+				response[tmp - response] = 0;
+				printf("%s\n", response);
 			}
 		}
 		else
