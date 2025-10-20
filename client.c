@@ -31,7 +31,7 @@ void communication( void )
 		bzero(request, sizeof(request));
 		printf("Enter the command: ");
 		n = 0;
-		while (n < REQ_CAPACITY - 1) 
+		while (n < REQ_CAPACITY - 1 - 3) 
 		{
 			request[n] = getchar();
 			if (request[n] == '\n')
@@ -53,24 +53,26 @@ void communication( void )
 			printf ("Allocation failure\n");
 			continue ;
 		}
-		if (splitted[0] && strcmp(splitted[0], "connect") == 0)
+		if (splitted[0] && splitted[0][0] == '7')
+		// if (splitted[0] && strcmp(splitted[0], "connect") == 0)
 		{
 			struct sockaddr_in	servaddr;
 			char				tmp_buf[30];
 
+			// splitted[1] = "127.0.0.1";
 			if (send(sockfd, NULL, 0, MSG_NOSIGNAL) >= 0)
 			{
 				printf ("Already connected to the server\n");
 				free_2d_array(splitted);
 				continue ;
 			}
-			if (!splitted[1] || !splitted[2] || inet_pton(AF_INET, splitted[1], tmp_buf) == 0)
-			{
-				printf ("Invalid arguments\n");
-				free_2d_array(splitted);
-				continue ;
-			}
-			int	port = atoi(splitted[2]);
+			// if (!splitted[1] || !splitted[2] || inet_pton(AF_INET, splitted[1], tmp_buf) == 0)
+			// {
+			// 	printf ("Invalid arguments\n");
+			// 	free_2d_array(splitted);
+			// 	continue ;
+			// }
+			int	port = atoi(splitted[0]);
 			// socket create and verification
 			// sockfd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
 			sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -85,8 +87,12 @@ void communication( void )
 			
 			// assign IP, PORT
 			servaddr.sin_family = AF_INET;
-			servaddr.sin_addr.s_addr = inet_addr(splitted[1]);
+			// servaddr.sin_addr.s_addr = inet_addr(splitted[1]);
+			servaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
 			servaddr.sin_port = htons(port);
+			
+			// splitted[1] = malloc(1);
+
 			// fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFL, 0) | O_NONBLOCK);
 
 			// connect the client socket to server socket
@@ -102,6 +108,7 @@ void communication( void )
 		else if (splitted[0] && \
 			(strcmp(splitted[0], "disconnect") == 0 || strcmp(splitted[0], "shell") == 0))
 		{
+			printf ("alo\n");
 			if (send(sockfd, NULL, 0, MSG_NOSIGNAL) < 0)
 			{
 				printf ("Not connected to the server\n");

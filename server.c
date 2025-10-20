@@ -14,7 +14,7 @@
 #include <sys/wait.h>
 #include <signal.h>
 
-#define PORT			7744
+#define PORT			7747
 #define BUF_SIZE		100
 #define INCREASE		1
 #define DECREASE		0
@@ -59,6 +59,15 @@ void	sig_handler(int signum)
 	}
 }
 
+void set_signal_action(void)
+{
+	struct sigaction act;
+
+	bzero(&act, sizeof(act));
+	act.sa_handler = &sig_handler;
+	sigaction(SIGINT, &act, NULL);
+}
+
 void	change_clients_count(pthread_mutex_t *mut, int volatile *active_clients, int side)
 {
 	pthread_mutex_lock(mut);
@@ -67,11 +76,6 @@ void	change_clients_count(pthread_mutex_t *mut, int volatile *active_clients, in
 	else
 		(*active_clients)++;
 	pthread_mutex_unlock(mut);
-}
-
-size_t	shifting(char *buf, int count)
-{
-	return (strlen(buf) + count);
 }
 
 char	*run_shell_command(char *full_command)
@@ -89,6 +93,7 @@ char	*run_shell_command(char *full_command)
 		return (strdup(FAILED("execute")));
 	}
 	to_exec = split(full_command, ' ');
+	for (int i = 0; to_exec[i]; ++i) printf ("`%s`\n", to_exec[i]);
 	if (!to_exec)
 	{
 		close(pipefd[0]);
@@ -96,6 +101,7 @@ char	*run_shell_command(char *full_command)
 		printf ("Malloc error\n");
 		return (strdup(FAILED("memory")));
 	}
+	printf ("fullcmd: '%s'\n", full_command);
 	cpid = fork();
 	if (cpid < 0)
 	{
@@ -116,19 +122,23 @@ char	*run_shell_command(char *full_command)
 			exit (1);
 		}
 		close(pipefd[1]);
-		execvp(to_exec[0], to_exec);
-		exit(1);
+		exit(execvp(to_exec[0], to_exec));
+		// printf ("its adorable %d\n", errno);
+
+		// exit(1);
 	}
 	else
 	{
 		int		result;
+		int		status;
 		struct timeval	time_start;
 		struct timeval	time_current;
+		
 		free_2d_array(to_exec);
 		gettimeofday(&time_start, NULL);
 		while (1)
 		{
-			result = waitpid(cpid, NULL, WNOHANG);
+			result = waitpid(cpid, &status, WNOHANG);
 			if (result == cpid)
 				break;
 			else if (result == 0)
@@ -138,7 +148,7 @@ char	*run_shell_command(char *full_command)
 				if (timeout / 1000 >= TIMEOUT_SEC)
 				{
 					kill(cpid, SIGKILL);
-					waitpid(cpid, NULL, 0);
+					waitpid(cpid, &status, 0);
 					close(pipefd[1]);
 					close(pipefd[0]);
 					return (strdup(FAILED("timeout")));
@@ -148,9 +158,19 @@ char	*run_shell_command(char *full_command)
 			else
 			{
 				kill(cpid, SIGKILL);
-				waitpid(cpid, NULL, 0);
+				waitpid(cpid, &status, 0);
 				close(pipefd[1]);
-				close(pipefd[0]);	
+				close(pipefd[0]);
+				return (strdup(FAILED("execute")));
+			}
+		}
+		if (WIFEXITED(status))
+		{
+			status = WEXITSTATUS(status);
+			if (status)
+			{
+				close(pipefd[1]);
+				close(pipefd[0]);
 				return (strdup(FAILED("execute")));
 			}
 		}
@@ -164,15 +184,12 @@ char	*run_shell_command(char *full_command)
 		}
 		bzero(response, BUF_SIZE + 1);
 		int read_cnt = read(pipefd[0], response, BUF_SIZE);
-		// printf ("res: '%s'\n", response);
 		if (read_cnt <= 0)
 		{
 			close(pipefd[0]);
 			free(response);
 			return (strdup(FAILED("read")));
 		}
-		// if (read_cnt == BUF_SIZE)
-		// {
 		while (strstr(response, "\r\n") == NULL)
 		{
 			size_t	last_len = strlen(response);
@@ -197,7 +214,6 @@ char	*run_shell_command(char *full_command)
 			response[last_len + read_cnt] = 0;
 			// printf ("after recv %d errno %d\n", read_cnt, errno);
 		}
-		// }
 	}
 	return (response);
 }
@@ -207,16 +223,16 @@ int	parse_command(data_t *client)
 	int		ret_code;
 	char	**splitted;
 
-	ret_code = 0;
+	ret_code = SUCCESS;
 	splitted = split(client->request, ' ');
 	if (!splitted)
-		return (2);
+		return (ERROR);
 	if (splitted[0] && strcmp(splitted[0], "disconnect") == 0)
-		ret_code = 1;
+		ret_code = DISCONNECT;
 	else if (splitted[0] && strcmp(splitted[0], "shell") == 0)
 	{
 		if (!splitted[1] || splitted[1][0] != '"')
-			ret_code = 2;
+			ret_code = ERROR;
 		else
 		{
 			int	i;
@@ -228,12 +244,11 @@ int	parse_command(data_t *client)
 			for (i = from_start + 1; client->request[i] && client->request[i] != '"'; ++i)
 				;
 			if (!client->request[i])
-				ret_code = 2;
+				ret_code = ERROR;
 			else
 			{
 				client->request[i] = 0;
 				// printf ("sending to execute '%s'\n", client->request + from_start + 1);
-				// response = run_shell_command(client->request + from_start + 1, &client->response);
 				client->response = run_shell_command(client->request + from_start + 1);
 			}
 		}
@@ -296,6 +311,7 @@ void	*client_handler(void *p_socket)
 			data.request[last_len + read_cnt] = 0;
 		}
 		int	ret_code = parse_command(&data);
+		// printf ("'%s'\n", data.request);
 		if (data.request) free(data.request);
 		if (ret_code == 1)
 		{
@@ -306,22 +322,12 @@ void	*client_handler(void *p_socket)
 		}
 		else if (ret_code == 2)
 			data.response = strdup("Wrong command format\r\n");
-		printf ("resp is '%s'\n", data.response);
+		// printf ("resp is '%s'\n", data.response);
 		send(socket, data.response, strlen(data.response), MSG_NOSIGNAL);
 		if (data.response) free(data.response);
 	}
 	return (NULL);
 }
-
-void set_signal_action(void)
-{
-	struct sigaction act;
-
-	bzero(&act, sizeof(act));
-	act.sa_handler = &sig_handler;
-	sigaction(SIGINT, &act, NULL);
-}
-
 
 int main()
 {
@@ -356,6 +362,7 @@ int main()
 	else printf("Socket successfully created\n");
 
 	max_fd = server_socket + 1;
+	printf ("max: %d\n", max_fd);
 	int	opt = 0;
 	setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 	// fcntl(server_socket, F_SETFL, fcntl(server_socket, F_GETFL, 0) | O_NONBLOCK);
@@ -394,7 +401,7 @@ int main()
 		active_clients++;
 		// cli_fds[client_socket] = client_socket;
 		pthread_mutex_unlock(&cli_cnt_mutex);
-		max_fd = (max_fd >= client_socket ? max_fd : client_socket);
+		max_fd = (max_fd > client_socket ? max_fd : client_socket);
 		printf ("New client connected\n");
 		int		*new_client_socket = malloc(sizeof(int));
 		if (!new_client_socket)
@@ -427,8 +434,12 @@ int main()
 	}
 	if (server_socket)
 		close(server_socket);
-	for (int i = 3; i < max_fd; ++i)
+	for (int i = 3; i <= max_fd; ++i)
+	{
+		printf ("Closing %d client\n", i);
+		send(i, "Server is closing", 17, MSG_NOSIGNAL);
 		close(i);
+	}
 	printf ("Server closed!!!\n");
 	return (0);
 		// int	ret = select(max_fd + 1, &read_fds, &write_fds, &exception_fds, NULL /*timeout*/);

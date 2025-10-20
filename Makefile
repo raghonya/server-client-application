@@ -2,7 +2,7 @@ CC				=	cc
 SERVER_NAME		=	server
 CLIENT_NAME		=	client
 CFLAGS			=	-pthread -g -Wall -Wextra# -Werror
-#CFLAGS			+=	-g -fsanitize=address
+# CFLAGS			+=	-g -fsanitize=address
 DEP				=	Makefile
 OBJDIR			=	obj
 SERVER_SRCS		=	server.c split.c utils.c
