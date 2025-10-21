@@ -441,7 +441,7 @@ int main()
 	for (int i = 0; i < MAX_CLI_COUNT; ++i)
 	{
 		printf ("Closing %d client\n", cli_fds[i]);
-		send(cli_fds[i], "Server is closed\r\n", 19, MSG_NOSIGNAL);
+		send(cli_fds[i], "Server is closed\r\n", 18, MSG_NOSIGNAL);
 		close(cli_fds[i]);
 	}
 	printf ("Server closed!!!\n");
