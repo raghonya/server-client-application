@@ -1,54 +1,10 @@
-#include <unistd.h>
-#include <netinet/in.h>
-#include <fcntl.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <strings.h>
-#include <sys/select.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <pthread.h>
-#include <sys/time.h> 
-#include <errno.h> 
-#include <sys/wait.h>
-#include <signal.h>
-
-#define PORT			7744
-#define BUF_SIZE		100
-#define INCREASE		1
-#define DECREASE		0
-#define TIMEOUT_SEC		3
-#define MAX_CLI_COUNT	5
-
-#define FAILED(cause)	"Error: "cause"\r\n"
-
-typedef enum error_codes_t
-{
-	SUCCESS = 0,
-	DISCONNECT,
-	ERROR
-} error_codes_t;
-
-char	**split(char *, char);
-void	free_2d_array(char **);
-
-// typedef struct cli_data
-// {
-// 	int			socket;
-// 	struct cli_data	*next;
-// } cli_data;
-
-typedef struct data_t
-{
-	char	*request;
-	char	*response;
-} data_t;
+#include "sc.h"
 
 int				server_socket;
 int volatile	server_running = 1;
 int	volatile	active_clients;
 pthread_mutex_t	cli_cnt_mutex;
+list_t			*cli_rec_fd;
 int				cli_fds[MAX_CLI_COUNT];
 
 void	sig_handler(int signum)
@@ -78,7 +34,6 @@ void	change_clients_count(pthread_mutex_t *mut, int volatile *active_clients, in
 		(*active_clients)--;
 	else
 		(*active_clients)++;
-	printf ("Actually count: %d\n", *active_clients);
 	pthread_mutex_unlock(mut);
 }
 
@@ -97,7 +52,6 @@ char	*run_shell_command(char *full_command)
 		return (strdup(FAILED("execute")));
 	}
 	to_exec = split(full_command, ' ');
-	for (int i = 0; to_exec[i]; ++i) printf ("`%s`\n", to_exec[i]);
 	if (!to_exec)
 	{
 		close(pipefd[0]);
@@ -127,9 +81,6 @@ char	*run_shell_command(char *full_command)
 		}
 		close(pipefd[1]);
 		exit(execvp(to_exec[0], to_exec));
-		// printf ("its adorable %d\n", errno);
-
-		// exit(1);
 	}
 	else
 	{
@@ -198,7 +149,6 @@ char	*run_shell_command(char *full_command)
 		{
 			size_t	last_len = strlen(response);
 			char *tmp = response;
-			// printf ("readcnt: %d\n", read_cnt);
 			
 			response = realloc(response, last_len + read_cnt + 1);
 			if (!response)
@@ -207,7 +157,6 @@ char	*run_shell_command(char *full_command)
 				close(pipefd[0]);
 				return (strdup(FAILED("memory")));
 			}
-			// printf ("len: '%s'\n", response);
 			read_cnt = read(pipefd[0], response + last_len, BUF_SIZE);
 			if (read_cnt < 0)
 			{
@@ -216,7 +165,6 @@ char	*run_shell_command(char *full_command)
 				return (strdup(FAILED("read")));
 			}
 			response[last_len + read_cnt] = 0;
-			// printf ("after recv %d errno %d\n", read_cnt, errno);
 		}
 	}
 	return (response);
@@ -267,7 +215,6 @@ void	*client_handler(void *p_socket)
 	int		read_cnt;
 	data_t	data;
 
-	free(p_socket);
 	while (server_running)
 	{
 		data.response = NULL;
@@ -290,7 +237,6 @@ void	*client_handler(void *p_socket)
 			change_clients_count(&cli_cnt_mutex, &active_clients, DECREASE);
 			break ;
 		}
-		// printf ("readcnt: %d, buf: '%s'\n", read_cnt, data.request);
 		while (strstr(data.request, "\r\n") == NULL)
 		{
 			size_t	last_len = strlen(data.request);
@@ -316,18 +262,17 @@ void	*client_handler(void *p_socket)
 			data.request[last_len + read_cnt] = 0;
 		}
 		int	ret_code = parse_command(&data);
-		// printf ("'%s'\n", data.request);
 		if (data.request) free(data.request);
-		if (ret_code == 1)
+		if (ret_code == DISCONNECT)
 		{
 			printf ("CLient %d disconnected via command\n", socket);
+			send(socket, "Disconnected from the server\r\n", 30, MSG_NOSIGNAL);
 			close(socket);
 			change_clients_count(&cli_cnt_mutex, &active_clients, DECREASE);
 			break ;
 		}
-		else if (ret_code == 2)
+		else if (ret_code == ERROR)
 			data.response = strdup("Wrong command format\r\n");
-		// printf ("resp is '%s'\n", data.response);
 		send(socket, data.response, strlen(data.response), MSG_NOSIGNAL);
 		if (data.response) free(data.response);
 	}
@@ -338,7 +283,6 @@ int main()
 {
 	struct sockaddr_in	servaddr;
 
-	int					max_fd;
 	struct sockaddr_in	cli;
 	socklen_t			cli_len;
 	int					client_socket;
@@ -363,8 +307,6 @@ int main()
 	}
 	else printf("Socket successfully created\n");
 
-	max_fd = server_socket + 1;
-	printf ("max: %d\n", max_fd);
 	int	opt = 0;
 	setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 	// fcntl(server_socket, F_SETFL, fcntl(server_socket, F_GETFL, 0) | O_NONBLOCK);
@@ -380,7 +322,6 @@ int main()
 		printf("Listen failed\n");
 		exit(1);
 	}
-
 
 	while (server_running)
 	{
@@ -405,7 +346,7 @@ int main()
 		cli_fds[active_clients] = client_socket;
 		active_clients++;
 		pthread_mutex_unlock(&cli_cnt_mutex);
-		max_fd = (max_fd > client_socket ? max_fd : client_socket);
+		lstadd_back(&cli_rec_fd, lstnew(client_socket));
 		printf ("New client connected\n");
 		int		*new_client_socket = malloc(sizeof(int));
 		if (!new_client_socket)
@@ -420,6 +361,7 @@ int main()
 		{
 			close(client_socket);
 			free(new_client_socket);
+			lstclear(&cli_rec_fd);
 			change_clients_count(&cli_cnt_mutex, &active_clients, DECREASE);
 			continue ;
 		}
@@ -430,6 +372,7 @@ int main()
 			close(*new_client_socket);
 			free(new_client_socket);
 			free(client_thread);
+			lstclear(&cli_rec_fd);
 			change_clients_count(&cli_cnt_mutex, &active_clients, DECREASE);
 			continue ;
 		}
@@ -440,71 +383,12 @@ int main()
 		close(server_socket);
 	for (int i = 0; i < MAX_CLI_COUNT; ++i)
 	{
+		if (cli_fds[i] == -1)
+			continue ;
 		printf ("Closing %d client\n", cli_fds[i]);
 		send(cli_fds[i], "Server is closed\r\n", 18, MSG_NOSIGNAL);
 		close(cli_fds[i]);
 	}
 	printf ("Server closed!!!\n");
 	return (0);
-		// int	ret = select(max_fd + 1, &read_fds, &write_fds, &exception_fds, NULL /*timeout*/);
-		// if (ret == 0)
-		// {
-		// 	printf ("Timeout\n");
-		// 	continue ;
-		// }
-		// else if (ret < 0)
-		// {
-		// 	printf ("Socket error\n");
-		// 	continue ;
-		// }
-		// if (FD_ISSET(server_socket, &read_fds))
-		// {
-			
-		// 	cli_len = sizeof(cli);	
-		// 	client_socket = accept(server_socket, (struct sockaddr *)&cli, &cli_len);
-		// 	if (client_socket < 0)
-		// 		printf ("Accept failed\n");
-		// 	else
-		// 	{
-		// 		printf ("New client connected with socket %d\n", client_socket);
-		// 		FD_SET(client_socket, &master_read_fds);
-		// 		max_fd = (max_fd >= client_socket) ? max_fd : client_socket;
-		// 	}
-		// 	continue ;
-		// }
-		// for (int fd = 3; fd < max_fd + 1; ++fd)
-		// {
-		// 	if (FD_ISSET(fd, &read_fds))
-		// 	{
-		// 		bzero(clients[fd].request, BUF_SIZE);
-		// 		int read_cnt = recv(fd, clients[fd].request, BUF_SIZE, 0);
-		// 		if (read_cnt <= 0)
-		// 		{
-		// 			printf ("Client %d disconnected\n", fd);
-		// 			FD_CLR(fd, &master_read_fds);
-		// 			close(fd);
-		// 			continue ;
-		// 		}
-		// 		clients[fd].request[BUF_SIZE - 1] = 0;
-		// 		bzero(clients[fd].response, BUF_SIZE);
-		// 		int	ret_code = parse_command(&clients[fd]);
-		// 		if (ret_code == 1)
-		// 		{
-		// 			printf ("CLient %d disconnected\n", fd);
-		// 			FD_CLR(fd, &master_read_fds);
-		// 			close(fd);
-		// 			continue ;
-		// 		}
-		// 		else
-		// 		{
-		// 			// printf ("buf is '%s'\n", clients[fd].response);
-		// 			if (ret_code == 2 || !clients[fd].response[0])
-		// 				strcpy(clients[fd].response, "Error in executing");
-					
-		// 			clients[fd].response[BUF_SIZE - 1] = 0;
-		// 			send(fd, clients[fd].response, strlen(clients[fd].response), 0);
-		// 		}
-		// 	}
-		// }
-
 }

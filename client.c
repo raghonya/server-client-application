@@ -1,14 +1,4 @@
-#include <arpa/inet.h>
-#include <ctype.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <sys/select.h>
-#include <sys/socket.h>
-#include <sys/socketvar.h>
+#include "sc.h"
 
 #define REQ_CAPACITY	2000
 #define RESP_CHUNK		512
@@ -157,6 +147,9 @@ void communication( void )
 				char *tmp = strstr(response, "\r\n");
 				response[tmp - response] = 0;
 				printf("%s\n", response);
+				free(response);
+				if (strcmp(splitted[0], "disconnect") == 0)
+					close(sockfd);
 			}
 		}
 		else
