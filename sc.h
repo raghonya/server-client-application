@@ -19,20 +19,22 @@
 #include <sys/socketvar.h>
 
 #define PORT			7744
-#define BUF_SIZE		100
-#define INCREASE		1
-#define DECREASE		0
+#define BUF_SIZE		128
 #define TIMEOUT_SEC		3
 #define MAX_CLI_COUNT	5
 
+#define INCREASE		1
+#define DECREASE		0
+
+
 #define FAILED(cause)	"Error: "cause"\r\n"
 
-typedef enum error_codes_t
+typedef enum error_codes_e
 {
 	SUCCESS = 0,
 	DISCONNECT,
 	ERROR
-} error_codes_t;
+} error_codes_e;
 
 typedef struct data_t
 {
@@ -40,19 +42,19 @@ typedef struct data_t
 	char	*response;
 } data_t;
 
-typedef struct list_t
+typedef enum state_e
 {
-	int				content;
-	struct list_t	*next;
-}	list_t;
+	INACTIVE = 0,
+	ACTIVE
+} state_e;
+
+typedef struct fds
+{
+	int		socket;
+	state_e		state;
+} fds;
 
 char	**split(char *, char);
 void	free_2d_array(char **);
-void	lstadd_back(list_t **, list_t *);
-void	lstadd_front(list_t **, list_t *);
-void	lstclear(list_t **);
-void	lstdelone(list_t *);
-int		lstsize(list_t *);
-list_t	*lstnew(int);
 
 #endif

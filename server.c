@@ -4,8 +4,7 @@ int				server_socket;
 int volatile	server_running = 1;
 int	volatile	active_clients;
 pthread_mutex_t	cli_cnt_mutex;
-list_t			*cli_rec_fd;
-int				cli_fds[MAX_CLI_COUNT];
+fds				cli_fds[MAX_CLI_COUNT];
 
 void	sig_handler(int signum)
 {
@@ -35,6 +34,73 @@ void	change_clients_count(pthread_mutex_t *mut, int volatile *active_clients, in
 	else
 		(*active_clients)++;
 	pthread_mutex_unlock(mut);
+}
+
+void	rm_client_from_list(int socket)
+{
+	for (int i = 0; i < MAX_CLI_COUNT; ++i)
+	{
+		if (cli_fds[i].socket == socket)
+		{
+			close(socket);
+			cli_fds[i].state = INACTIVE;
+			return ;
+		}
+	}
+}
+void	add_client_to_list(int socket)
+{
+	for (int i = 0; i < MAX_CLI_COUNT; ++i)
+	{
+		if (cli_fds[i].state == INACTIVE)
+		{
+			cli_fds[i].socket = socket;
+			cli_fds[i].state = ACTIVE;
+			return ;
+		}
+	}
+}
+
+char	*create_response(int pipefd)
+{
+	char	*response;
+
+	response = malloc(sizeof(char) * (BUF_SIZE + 1));
+	if (!response)
+	{
+		close(pipefd);
+		return (strdup(FAILED("memory")));
+	}
+	bzero(response, BUF_SIZE + 1);
+	int read_cnt = read(pipefd, response, BUF_SIZE);
+	if (read_cnt <= 0)
+	{
+		close(pipefd);
+		free(response);
+		return (strdup(FAILED("read")));
+	}
+	while (strstr(response, "\r\n") == NULL)
+	{
+		size_t	last_len = strlen(response);
+		char *tmp = response;
+		
+		response = realloc(response, last_len + read_cnt + 1);
+		if (!response)
+		{
+			free(tmp);
+			close(pipefd);
+			return (strdup(FAILED("memory")));
+		}
+		read_cnt = read(pipefd, response + last_len, BUF_SIZE);
+		if (read_cnt < 0)
+		{
+			free(response);
+			close(pipefd);
+			return (strdup(FAILED("read")));
+		}
+		response[last_len + read_cnt] = 0;
+	}
+	return (response);
 }
 
 char	*run_shell_command(char *full_command)
@@ -131,41 +197,7 @@ char	*run_shell_command(char *full_command)
 		}
 		write(pipefd[1], "\r\n", 2);
 		close(pipefd[1]);
-		response = malloc(sizeof(char) * (BUF_SIZE + 1));
-		if (!response)
-		{
-			close(pipefd[0]);
-			return (strdup(FAILED("memory")));
-		}
-		bzero(response, BUF_SIZE + 1);
-		int read_cnt = read(pipefd[0], response, BUF_SIZE);
-		if (read_cnt <= 0)
-		{
-			close(pipefd[0]);
-			free(response);
-			return (strdup(FAILED("read")));
-		}
-		while (strstr(response, "\r\n") == NULL)
-		{
-			size_t	last_len = strlen(response);
-			char *tmp = response;
-			
-			response = realloc(response, last_len + read_cnt + 1);
-			if (!response)
-			{
-				free(tmp);
-				close(pipefd[0]);
-				return (strdup(FAILED("memory")));
-			}
-			read_cnt = read(pipefd[0], response + last_len, BUF_SIZE);
-			if (read_cnt < 0)
-			{
-				free(response);
-				close(pipefd[0]);
-				return (strdup(FAILED("read")));
-			}
-			response[last_len + read_cnt] = 0;
-		}
+		response = create_response(pipefd[0]);
 	}
 	return (response);
 }
@@ -222,7 +254,8 @@ void	*client_handler(void *p_socket)
 		if (!data.request)
 		{
 			printf ("Malloc error\n");
-			close(socket);
+			rm_client_from_list(socket);
+			// close(socket);
 			change_clients_count(&cli_cnt_mutex, &active_clients, DECREASE);
 			break ;
 			// return (NULL);
@@ -232,8 +265,9 @@ void	*client_handler(void *p_socket)
 		if  (read_cnt <= 0)
 		{
 			printf ("Client %d disconnected\n", socket);
-			close(socket);
+			// close(socket);
 			free(data.request);
+			rm_client_from_list(socket);
 			change_clients_count(&cli_cnt_mutex, &active_clients, DECREASE);
 			break ;
 		}
@@ -245,8 +279,8 @@ void	*client_handler(void *p_socket)
 			if (!data.request)
 			{
 				printf ("Malloc error\n");
-				close(socket);
 				free(tmp);
+				rm_client_from_list(socket);
 				change_clients_count(&cli_cnt_mutex, &active_clients, DECREASE);
 				return (NULL);
 			}
@@ -254,8 +288,8 @@ void	*client_handler(void *p_socket)
 			if (read_cnt < 0)
 			{
 				printf ("Connection closed\n");
-				close(socket);
 				free(data.request);
+				rm_client_from_list(socket);			
 				change_clients_count(&cli_cnt_mutex, &active_clients, DECREASE);
 				return (NULL);
 			}
@@ -267,7 +301,7 @@ void	*client_handler(void *p_socket)
 		{
 			printf ("CLient %d disconnected via command\n", socket);
 			send(socket, "Disconnected from the server\r\n", 30, MSG_NOSIGNAL);
-			close(socket);
+			rm_client_from_list(socket);			
 			change_clients_count(&cli_cnt_mutex, &active_clients, DECREASE);
 			break ;
 		}
@@ -337,31 +371,30 @@ int main()
 		pthread_mutex_lock(&cli_cnt_mutex);
 		if (active_clients >= MAX_CLI_COUNT)
 		{
-			// printf ("Server supports only %d clients at once\n", MAX_CLI_COUNT);
 			send(client_socket, "Busy\r\n", 6, MSG_NOSIGNAL);
 			close(client_socket);
 			pthread_mutex_unlock(&cli_cnt_mutex);
 			continue ;
 		}
-		cli_fds[active_clients] = client_socket;
+		add_client_to_list(client_socket);
+		// cli_fds[active_clients] = client_socket;
 		active_clients++;
 		pthread_mutex_unlock(&cli_cnt_mutex);
-		lstadd_back(&cli_rec_fd, lstnew(client_socket));
 		printf ("New client connected\n");
 		int		*new_client_socket = malloc(sizeof(int));
 		if (!new_client_socket)
 		{
 			printf ("Malloc error\n");
-			close(client_socket);
+			// close(client_socket);
+			rm_client_from_list(client_socket);
 			change_clients_count(&cli_cnt_mutex, &active_clients, DECREASE);
 			continue ;
 		}
 		client_thread = malloc(sizeof(pthread_t));
 		if (!client_thread)
 		{
-			close(client_socket);
 			free(new_client_socket);
-			lstclear(&cli_rec_fd);
+			rm_client_from_list(client_socket);
 			change_clients_count(&cli_cnt_mutex, &active_clients, DECREASE);
 			continue ;
 		}
@@ -369,10 +402,9 @@ int main()
 		if (pthread_create(client_thread, NULL, &client_handler, new_client_socket) != 0)
 		{
 			printf ("Pthread failed\n");
-			close(*new_client_socket);
 			free(new_client_socket);
 			free(client_thread);
-			lstclear(&cli_rec_fd);
+			rm_client_from_list(client_socket);
 			change_clients_count(&cli_cnt_mutex, &active_clients, DECREASE);
 			continue ;
 		}
@@ -383,11 +415,11 @@ int main()
 		close(server_socket);
 	for (int i = 0; i < MAX_CLI_COUNT; ++i)
 	{
-		if (cli_fds[i] == -1)
+		if (cli_fds[i].state == INACTIVE)
 			continue ;
-		printf ("Closing %d client\n", cli_fds[i]);
-		send(cli_fds[i], "Server is closed\r\n", 18, MSG_NOSIGNAL);
-		close(cli_fds[i]);
+		printf ("Closing %d client\n", cli_fds[i].socket);
+		send(cli_fds[i].socket, "Server is closed\r\n", 18, MSG_NOSIGNAL);
+		close(cli_fds[i].socket);
 	}
 	printf ("Server closed!!!\n");
 	return (0);
