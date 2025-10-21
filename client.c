@@ -45,9 +45,6 @@ void communication( void )
 			struct sockaddr_in	servaddr;
 			char				tmp_buf[30];
 
-			// int esim = send(sockfd, NULL, 0, MSG_NOSIGNAL);
-			// printf ("esim: %d\n", esim);
-			// if (esim >= 0)
 			if (send(sockfd, NULL, 0, MSG_NOSIGNAL) >= 0)
 			{
 				printf ("Already connected to the server\n");
@@ -94,21 +91,13 @@ void communication( void )
 		else if (splitted[0] && \
 			(strcmp(splitted[0], "disconnect") == 0 || strcmp(splitted[0], "shell") == 0))
 		{
-			
-			// printf ("baaa\n");
-			// int esim = send(sockfd, NULL, 0, MSG_NOSIGNAL);
-			// printf ("esim: %d\n", esim);
-			// if (esim < 0)
 			if (send(sockfd, NULL, 0, MSG_NOSIGNAL) < 0)
 			{
 				printf ("Not connected to the server\n");
 				free_2d_array(splitted);
 				continue ;
 			}
-			// printf ("aloooooaaa\n");
 			int send_ret = send(sockfd, request, strlen(request), MSG_NOSIGNAL);
-			printf ("sendret: %d\n", send_ret);
-			// printf ("sendret: %d\n", send_ret);
 			if (send_ret < 0)
 				printf ("Youre not connected\n");
 			else

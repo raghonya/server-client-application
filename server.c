@@ -264,10 +264,8 @@ void	*client_handler(void *p_socket)
 		{
 			printf ("Malloc error\n");
 			rm_client_from_list(socket);
-			// close(socket);
 			change_clients_count(&cli_cnt_mutex, &active_clients, DECREASE);
 			break ;
-			// return (NULL);
 		}
 		bzero(data.request, BUF_SIZE + 1);
 		read_cnt = recv(socket, data.request, BUF_SIZE, MSG_NOSIGNAL);
