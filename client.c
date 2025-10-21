@@ -98,7 +98,6 @@ void communication( void )
 				continue ;
 			}
 			int send_ret = send(sockfd, request, strlen(request), MSG_NOSIGNAL);
-			// printf ("sendret: %d\n", send_ret);
 			if (send_ret < 0)
 				printf ("Youre not connected\n");
 			else
@@ -116,8 +115,11 @@ void communication( void )
 				*response = 0;
 				while (strstr(response, "\r\n") == NULL)
 				{
+					// printf ("resp: '%s'\n", response);
 					bzero(tmp_buf, RESP_CHUNK + 1);
+					// printf ("mors aziz arev\n");
 					recv_ret = recv(sockfd, tmp_buf, RESP_CHUNK, MSG_NOSIGNAL);
+					// printf ("stees aper\n");
 					if (recv_ret < 0)
 					{
 						printf ("Connection lost\n");
@@ -137,12 +139,12 @@ void communication( void )
 					}
 					strcat(response, tmp_buf);
 				}
+				if (strcmp(splitted[0], "disconnect") == 0 || strcmp(response, "Server is closed\r\n") == 0)
+					close(sockfd);
 				char *tmp = strstr(response, "\r\n");
 				response[tmp - response] = 0;
 				printf("%s\n", response);
 				free(response);
-				if (strcmp(splitted[0], "disconnect") == 0)
-					close(sockfd);
 			}
 		}
 		else
