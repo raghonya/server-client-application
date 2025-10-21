@@ -103,12 +103,11 @@ void communication( void )
 				close(sockfd);
 				continue ;
 			}
-			else printf("Connected to the server\n");
+			// else printf("Connected to the server\n");
 		}
 		else if (splitted[0] && \
 			(strcmp(splitted[0], "disconnect") == 0 || strcmp(splitted[0], "shell") == 0))
 		{
-			printf ("alo\n");
 			if (send(sockfd, NULL, 0, MSG_NOSIGNAL) < 0)
 			{
 				printf ("Not connected to the server\n");

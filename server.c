@@ -14,11 +14,12 @@
 #include <sys/wait.h>
 #include <signal.h>
 
-#define PORT			7747
+#define PORT			7744
 #define BUF_SIZE		100
 #define INCREASE		1
 #define DECREASE		0
 #define TIMEOUT_SEC		3
+#define MAX_CLI_COUNT	5
 
 #define FAILED(cause)	"Error: "cause"\r\n"
 
@@ -48,6 +49,7 @@ int				server_socket;
 int volatile	server_running = 1;
 int	volatile	active_clients;
 pthread_mutex_t	cli_cnt_mutex;
+int				cli_fds[MAX_CLI_COUNT];
 
 void	sig_handler(int signum)
 {
@@ -56,6 +58,7 @@ void	sig_handler(int signum)
 		server_running = 0;
 		printf ("SIGINT received, closing the server!\n");
 		close(server_socket);
+		server_socket = -1;
 	}
 }
 
@@ -75,6 +78,7 @@ void	change_clients_count(pthread_mutex_t *mut, int volatile *active_clients, in
 		(*active_clients)--;
 	else
 		(*active_clients)++;
+	printf ("Actually count: %d\n", *active_clients);
 	pthread_mutex_unlock(mut);
 }
 
@@ -273,13 +277,14 @@ void	*client_handler(void *p_socket)
 			printf ("Malloc error\n");
 			close(socket);
 			change_clients_count(&cli_cnt_mutex, &active_clients, DECREASE);
-			return (NULL);
+			break ;
+			// return (NULL);
 		}
 		bzero(data.request, BUF_SIZE + 1);
 		read_cnt = recv(socket, data.request, BUF_SIZE, MSG_NOSIGNAL);
 		if  (read_cnt <= 0)
 		{
-			printf ("Client disconnected\n");
+			printf ("Client %d disconnected\n", socket);
 			close(socket);
 			free(data.request);
 			change_clients_count(&cli_cnt_mutex, &active_clients, DECREASE);
@@ -315,7 +320,7 @@ void	*client_handler(void *p_socket)
 		if (data.request) free(data.request);
 		if (ret_code == 1)
 		{
-			printf ("CLient %d disconnected\n", socket);
+			printf ("CLient %d disconnected via command\n", socket);
 			close(socket);
 			change_clients_count(&cli_cnt_mutex, &active_clients, DECREASE);
 			break ;
@@ -333,17 +338,14 @@ int main()
 {
 	struct sockaddr_in	servaddr;
 
-	// int					cli_fds[20];
 	int					max_fd;
 	struct sockaddr_in	cli;
 	socklen_t			cli_len;
 	int					client_socket;
 	pthread_t			*client_thread;
-	int					active_clients;
 
 	// sigaction()
 	set_signal_action();
-	active_clients = 0;
 	cli_len = sizeof(cli);
 	// bzero(cli_fds, sizeof(cli_fds));
 	pthread_mutex_init(&cli_cnt_mutex, NULL);
@@ -373,7 +375,7 @@ int main()
 	}
 	else printf("Socket successfully binded\n"); 
 
-	if ((listen(server_socket, 5)) != 0)
+	if ((listen(server_socket, MAX_CLI_COUNT)) != 0)
 	{
 		printf("Listen failed\n");
 		exit(1);
@@ -382,24 +384,26 @@ int main()
 
 	while (server_running)
 	{
+		// pthread_mutex_lock(&cli_cnt_mutex);
+		// printf ("ACTIVE CLIENTS: %d\n", active_clients);
+		// pthread_mutex_unlock(&cli_cnt_mutex);
 		client_socket = accept(server_socket, (struct sockaddr *)&cli, &cli_len);
 		if (client_socket < 0)
 		{
 			printf ("Accept error\n");
 			continue ;
 		}
-		printf ("cli socket is %d\n", client_socket);
 		pthread_mutex_lock(&cli_cnt_mutex);
-		if (active_clients > 5)
+		if (active_clients >= MAX_CLI_COUNT)
 		{
-			printf ("Server supports only 5 clients at once\n");
-			// send(client_socket, "Busy\0", 5, MSG_NOSIGNAL);
+			// printf ("Server supports only %d clients at once\n", MAX_CLI_COUNT);
+			send(client_socket, "Busy\r\n", 6, MSG_NOSIGNAL);
 			close(client_socket);
 			pthread_mutex_unlock(&cli_cnt_mutex);
 			continue ;
 		}
+		cli_fds[active_clients] = client_socket;
 		active_clients++;
-		// cli_fds[client_socket] = client_socket;
 		pthread_mutex_unlock(&cli_cnt_mutex);
 		max_fd = (max_fd > client_socket ? max_fd : client_socket);
 		printf ("New client connected\n");
@@ -432,13 +436,13 @@ int main()
 		pthread_detach(*client_thread);
 		free(client_thread);
 	}
-	if (server_socket)
+	if (server_socket != -1)
 		close(server_socket);
-	for (int i = 3; i <= max_fd; ++i)
+	for (int i = 0; i < MAX_CLI_COUNT; ++i)
 	{
-		printf ("Closing %d client\n", i);
-		send(i, "Server is closing", 17, MSG_NOSIGNAL);
-		close(i);
+		printf ("Closing %d client\n", cli_fds[i]);
+		send(cli_fds[i], "Server is closed\r\n", 19, MSG_NOSIGNAL);
+		close(cli_fds[i]);
 	}
 	printf ("Server closed!!!\n");
 	return (0);
