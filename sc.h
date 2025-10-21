@@ -18,7 +18,7 @@
 #include <netinet/in.h>
 #include <sys/socketvar.h>
 
-#define PORT			7744
+#define PORT			7747
 #define BUF_SIZE		128
 #define TIMEOUT_SEC		3
 #define MAX_CLI_COUNT	5

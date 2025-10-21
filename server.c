@@ -8,12 +8,20 @@ fds				cli_fds[MAX_CLI_COUNT];
 
 void	sig_handler(int signum)
 {
-	if (signum == SIGINT)
+	if (signum == SIGINT || signum == SIGTERM)
 	{
 		server_running = 0;
 		printf ("SIGINT received, closing the server!\n");
 		close(server_socket);
 		server_socket = -1;
+		for (int i = 0; i < MAX_CLI_COUNT; ++i)
+		{
+			if (cli_fds[i].state == INACTIVE)
+				continue ;
+			printf ("Closing %d client\n", cli_fds[i].socket);
+			send(cli_fds[i].socket, "Server is closed\r\n", 18, MSG_NOSIGNAL);
+			close(cli_fds[i].socket);
+		}
 	}
 }
 
@@ -24,6 +32,7 @@ void set_signal_action(void)
 	bzero(&act, sizeof(act));
 	act.sa_handler = &sig_handler;
 	sigaction(SIGINT, &act, NULL);
+	sigaction(SIGTERM, &act, NULL);
 }
 
 void	change_clients_count(pthread_mutex_t *mut, int volatile *active_clients, int side)
@@ -413,14 +422,14 @@ int main()
 	}
 	if (server_socket != -1)
 		close(server_socket);
-	for (int i = 0; i < MAX_CLI_COUNT; ++i)
-	{
-		if (cli_fds[i].state == INACTIVE)
-			continue ;
-		printf ("Closing %d client\n", cli_fds[i].socket);
-		send(cli_fds[i].socket, "Server is closed\r\n", 18, MSG_NOSIGNAL);
-		close(cli_fds[i].socket);
-	}
+	// for (int i = 0; i < MAX_CLI_COUNT; ++i)
+	// {
+	// 	if (cli_fds[i].state == INACTIVE)
+	// 		continue ;
+	// 	printf ("Closing %d client\n", cli_fds[i].socket);
+	// 	send(cli_fds[i].socket, "Server is closed\r\n", 18, MSG_NOSIGNAL);
+	// 	close(cli_fds[i].socket);
+	// }
 	printf ("Server closed!!!\n");
 	return (0);
 }
