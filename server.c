@@ -246,6 +246,8 @@ int	parse_command(data_t *client)
 			}
 		}
 	}
+	else
+		ret_code = ERROR;
 	free_2d_array(splitted);
 	return (ret_code);
 }
@@ -430,4 +432,5 @@ int main()
 	// }
 	printf ("Server closed!!!\n");
 	return (0);
+
 }
