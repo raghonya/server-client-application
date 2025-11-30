@@ -68,17 +68,9 @@ void communication( void )
 			else printf("Socket successfully created\n");
 			bzero(&servaddr, sizeof(servaddr));
 			
-			// assign IP, PORT
 			servaddr.sin_family = AF_INET;
 			servaddr.sin_addr.s_addr = inet_addr(splitted[1]);
-			// servaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
 			servaddr.sin_port = htons(port);
-			
-			// splitted[1] = malloc(1);
-
-			// fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFL, 0) | O_NONBLOCK);
-
-			// connect the client socket to server socket
 			if (connect(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr))	< 0)
 			{
 				printf("Connection with the server failed\n");
@@ -86,7 +78,6 @@ void communication( void )
 				close(sockfd);
 				continue ;
 			}
-			// else printf("Connected to the server\n");
 		}
 		else if (splitted[0] && \
 			(strcmp(splitted[0], "disconnect") == 0 || strcmp(splitted[0], "shell") == 0))
@@ -115,11 +106,8 @@ void communication( void )
 				*response = 0;
 				while (strstr(response, "\r\n") == NULL)
 				{
-					// printf ("resp: '%s'\n", response);
 					bzero(tmp_buf, RESP_CHUNK + 1);
-					// printf ("mors aziz arev\n");
 					recv_ret = recv(sockfd, tmp_buf, RESP_CHUNK, MSG_NOSIGNAL);
-					// printf ("stees aper\n");
 					if (recv_ret < 0)
 					{
 						printf ("Connection lost\n");

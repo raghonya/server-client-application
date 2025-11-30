@@ -25,14 +25,12 @@ void	sig_handler(int signum)
 	}
 }
 
-void set_signal_action(void)
+void set_signal_action(struct sigaction *act)
 {
-	struct sigaction act;
-
 	bzero(&act, sizeof(act));
-	act.sa_handler = &sig_handler;
-	sigaction(SIGINT, &act, NULL);
-	sigaction(SIGTERM, &act, NULL);
+	act->sa_handler = &sig_handler;
+	sigaction(SIGINT, act, NULL);
+	sigaction(SIGTERM, act, NULL);
 }
 
 void	change_clients_count(pthread_mutex_t *mut, int volatile *active_clients, int side)
@@ -324,15 +322,15 @@ void	*client_handler(void *p_socket)
 
 int main()
 {
+	struct sigaction	act;
 	struct sockaddr_in	servaddr;
-
 	struct sockaddr_in	cli;
 	socklen_t			cli_len;
 	int					client_socket;
 	pthread_t			*client_thread;
 
 	// sigaction()
-	set_signal_action();
+	set_signal_action(&act);
 	cli_len = sizeof(cli);
 	// bzero(cli_fds, sizeof(cli_fds));
 	pthread_mutex_init(&cli_cnt_mutex, NULL);
@@ -368,9 +366,6 @@ int main()
 
 	while (server_running)
 	{
-		// pthread_mutex_lock(&cli_cnt_mutex);
-		// printf ("ACTIVE CLIENTS: %d\n", active_clients);
-		// pthread_mutex_unlock(&cli_cnt_mutex);
 		client_socket = accept(server_socket, (struct sockaddr *)&cli, &cli_len);
 		if (client_socket < 0)
 		{
@@ -386,7 +381,6 @@ int main()
 			continue ;
 		}
 		add_client_to_list(client_socket);
-		// cli_fds[active_clients] = client_socket;
 		active_clients++;
 		pthread_mutex_unlock(&cli_cnt_mutex);
 		printf ("New client connected\n");
@@ -422,14 +416,6 @@ int main()
 	}
 	if (server_socket != -1)
 		close(server_socket);
-	// for (int i = 0; i < MAX_CLI_COUNT; ++i)
-	// {
-	// 	if (cli_fds[i].state == INACTIVE)
-	// 		continue ;
-	// 	printf ("Closing %d client\n", cli_fds[i].socket);
-	// 	send(cli_fds[i].socket, "Server is closed\r\n", 18, MSG_NOSIGNAL);
-	// 	close(cli_fds[i].socket);
-	// }
 	printf ("Server closed!!!\n");
 	return (0);
 
