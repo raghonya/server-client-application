@@ -27,7 +27,7 @@ void	sig_handler(int signum)
 
 void set_signal_action(struct sigaction *act)
 {
-	bzero(&act, sizeof(act));
+	bzero(act, sizeof(*act));
 	act->sa_handler = &sig_handler;
 	sigaction(SIGINT, act, NULL);
 	sigaction(SIGTERM, act, NULL);
