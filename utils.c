@@ -1,4 +1,4 @@
-#include <stdlib.h>
+#include "sc.h"
 
 void    free_2d_array(char **arr)
 {

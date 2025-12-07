@@ -131,7 +131,7 @@ void communication( void )
 					close(sockfd);
 				char *tmp = strstr(response, "\r\n");
 				response[tmp - response] = 0;
-				printf("%s\n", response);
+				printf("Server response:\n'%s'\n", response);
 				free(response);
 			}
 		}

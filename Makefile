@@ -3,6 +3,7 @@ SERVER_NAME		=	server
 CLIENT_NAME		=	client
 CFLAGS			=	-pthread -g -Wall -Wextra# -Werror
 # CFLAGS			+=	-g -fsanitize=address
+CFLAGS			+=	-g -fsanitize=undefined
 HEADERS			=	sc.h
 DEP				=	Makefile $(HEADERS)
 OBJDIR			=	obj

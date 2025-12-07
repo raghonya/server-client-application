@@ -36,23 +36,31 @@ typedef enum error_codes_e
 	ERROR
 } error_codes_e;
 
-typedef struct data_t
+typedef struct s_data
 {
 	char	*request;
 	char	*response;
-} data_t;
+} t_data;
 
-typedef enum state_e
+typedef enum s_state
 {
 	INACTIVE = 0,
 	ACTIVE
-} state_e;
+} e_state;
 
-typedef struct fds
+typedef struct cli_t
 {
-	int		socket;
-	state_e		state;
-} fds;
+	int			socket;
+	pthread_t	handler;
+	e_state		state;
+	t_data		data;
+} cli_t;
+
+// typedef	struct s_list
+// {
+// 	void			*data;
+// 	struct s_state	*next;
+// } t_list;
 
 char	**split(char *, char);
 void	free_2d_array(char **);
