@@ -1,8 +1,4 @@
-#include "sc.h"
-
-#define REQ_CAPACITY	2048
-#define RESP_CHUNK		512
-#define DELIM			"\r\n\t\f\v "
+#include "client.h"
 
 void communication( void )
 {
@@ -14,7 +10,8 @@ void communication( void )
 
 	sockfd = 0;
 	response = NULL;
-	while (1) {
+	while (1)
+	{
 		bzero(request, sizeof(request));
 		printf("Enter the command: ");
 		n = 0;
@@ -94,7 +91,7 @@ void communication( void )
 			else
 			{
 				char	tmp_buf[RESP_CHUNK + 1];
-				int		recv_ret = 1;
+				int		recv_ret = RESP_CHUNK;
 
 				response = malloc(sizeof(char));
 				if (!response)
@@ -104,7 +101,7 @@ void communication( void )
 					continue ;
 				}
 				*response = 0;
-				while (strstr(response, "\r\n") == NULL)
+				while (recv_ret == RESP_CHUNK || strstr(response, "\r\n") == NULL)
 				{
 					bzero(tmp_buf, RESP_CHUNK + 1);
 					recv_ret = recv(sockfd, tmp_buf, RESP_CHUNK, MSG_NOSIGNAL);
@@ -129,8 +126,7 @@ void communication( void )
 				}
 				if (strcmp(splitted[0], "disconnect") == 0 || strcmp(response, "Server is closed\r\n") == 0)
 					close(sockfd);
-				char *tmp = strstr(response, "\r\n");
-				response[tmp - response] = 0;
+				response[strlen(response) - 2] = 0;
 				printf("Server response:\n'%s'\n", response);
 				free(response);
 			}

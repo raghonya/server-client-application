@@ -2,12 +2,18 @@ CC				=	cc
 SERVER_NAME		=	server
 CLIENT_NAME		=	client
 CFLAGS			=	-pthread -g -Wall -Wextra# -Werror
-# CFLAGS			+=	-g -fsanitize=address
-CFLAGS			+=	-g -fsanitize=undefined
-HEADERS			=	sc.h
+CFLAGS			+=	-g -fsanitize=address
+# CFLAGS			+=	-g -fsanitize=undefined
+HEADERS			=	server.h client.h
 DEP				=	Makefile $(HEADERS)
 OBJDIR			=	obj
-SERVER_SRCS		=	server.c split.c utils.c
+SERVER_SRCS		=	server.c \
+					s_client_handling.c \
+					s_client_response.c \
+					split.c \
+					s_utils.c \
+					utils.c
+
 CLIENT_SRCS		=	client.c split.c utils.c
 SERVER_OBJS		=	$(SERVER_SRCS:%.c=$(OBJDIR)/%.o)
 CLIENT_OBJS		=	$(CLIENT_SRCS:%.c=$(OBJDIR)/%.o)
