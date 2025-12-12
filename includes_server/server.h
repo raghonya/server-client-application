@@ -31,15 +31,15 @@
 typedef enum error_codes_e
 {
 	SUCCESS = 0,
-	DISCONNECT,
-	ERROR
+	ERROR,
+	DISCONNECT
 } error_codes_e;
 
 typedef struct s_data
 {
 	char	*request;
 	char	*response;
-} t_data;
+} data_t;
 
 typedef enum s_state
 {
@@ -52,7 +52,7 @@ typedef struct cli_t
 	int			socket;
 	pthread_t	handler;
 	e_state		state;
-	t_data		data;
+	data_t		data;
 } cli_t;
 
 extern int				g_server_socket;
@@ -73,6 +73,6 @@ int		create_client_handler(int client_socket);
 char	*create_response(int pipefd);
 char	*run_shell_command(char *full_command);
 int		validate_command(char *cmd, int *start_index);
-int		parse_command(t_data *client);
+int		parse_command(data_t *client);
 
 #endif

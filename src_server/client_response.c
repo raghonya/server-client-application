@@ -179,7 +179,7 @@ int		validate_command(char *cmd, int *start_index)
 	return (SUCCESS);
 }
 
-int	parse_command(t_data *client)
+int	parse_command(data_t *client)
 {
 	int		start_index;
 	char	**splitted;

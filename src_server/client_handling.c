@@ -1,73 +1,86 @@
 #include "server.h"
 
+char	*receive_request(char **request, int socket)
+{
+	char	*tmp;
+	size_t	last_len;
+	int		read_cnt;
+
+	read_cnt = BUF_SIZE;
+	last_len = 0;
+	do
+	{
+		if (*request)
+			last_len = strlen(*request);
+		tmp = *request;
+		*request = realloc(*request, last_len + read_cnt + 1);
+		if (!*request)
+		{
+			printf ("Malloc error\n");
+			free(tmp);
+			rm_client_from_list(socket);
+			return (NULL);
+		}
+		read_cnt = recv(socket, *request + last_len, BUF_SIZE, MSG_NOSIGNAL);
+		if (read_cnt < 0)
+		{
+			printf ("Connection closed\n");
+			free(*request);
+			rm_client_from_list(socket);
+			return (NULL);
+		}
+	}
+	while (strstr(*request, "\r\n") == NULL);
+
+	return (*request);
+}
+
+int	send_response(data_t *data, int socket)
+{
+	int	ret_code;
+
+	ret_code = parse_command(data);
+	if (data->request) free(data->request);
+	if (ret_code == DISCONNECT)
+	{
+		printf ("CLient %d disconnected via command\n", socket);
+		send(socket, "Disconnected from the server\r\n", 30, MSG_NOSIGNAL);
+		rm_client_from_list(socket);			
+		return (ERROR) ;
+	}
+	else if (ret_code == ERROR)
+		data->response = strdup("Wrong command format\r\n");
+	if (!data->response)
+	{
+		puts("Malloc error");
+		rm_client_from_list(socket);
+		return (ERROR);
+	}
+	send(socket, data->response, strlen(data->response), MSG_NOSIGNAL);
+	free(data->response);
+
+	return (SUCCESS);
+}
+
 void	*client_handler(void *cli_info)
 {
-	int		read_cnt;
 	int		ret_code;
 	cli_t	*client;
-	t_data	data;
+	data_t	data;
 
 	client = (cli_t *)(cli_info);
 	data = client->data;
 	while (g_server_running)
 	{
 		data.response = NULL;
-		data.request = calloc(BUF_SIZE + 1, sizeof(char));
-		if (!data.request)
+		data.request = NULL;
+		if (receive_request(&data.request, client->socket) == NULL)
 		{
-			printf ("Malloc error\n");
-			rm_client_from_list(client->socket);
-			break ;
-		}
-		read_cnt = recv(client->socket, data.request, BUF_SIZE, MSG_NOSIGNAL);
-		if  (read_cnt <= 0)
-		{
-			printf ("Client %d disconnected\n", client->socket);
-			free(data.request);
-			rm_client_from_list(client->socket);
-			break ;
-		}
-		while (strstr(data.request, "\r\n") == NULL)
-		{
-			size_t	last_len = strlen(data.request);
-			char *tmp = data.request;
-			data.request = realloc(data.request, last_len + read_cnt + 1);
-			if (!data.request)
-			{
-				printf ("Malloc error\n");
-				free(tmp);
-				rm_client_from_list(client->socket);
-				return (NULL);
-			}
-			read_cnt = recv(client->socket, data.request + last_len, BUF_SIZE, MSG_NOSIGNAL);
-			if (read_cnt < 0)
-			{
-				printf ("Connection closed\n");
-				free(data.request);
-				rm_client_from_list(client->socket);			
-				return (NULL);
-			}
-			data.request[last_len + read_cnt] = 0;
-		}
-		ret_code = parse_command(&data);
-		if (data.request) free(data.request);
-		if (ret_code == DISCONNECT)
-		{
-			printf ("CLient %d disconnected via command\n", client->socket);
-			send(client->socket, "Disconnected from the server\r\n", 30, MSG_NOSIGNAL);
-			rm_client_from_list(client->socket);			
-			break ;
-		}
-		else if (ret_code == ERROR)
-			data.response = strdup("Wrong command format\r\n");
-		if (!data.response)
-		{
-			printf ("Malloc error\n");
-			rm_client_from_list(client->socket);
+			puts("Unable to receive request: Error encountered");
 			return (NULL);
 		}
-		send(client->socket, data.response, strlen(data.response), MSG_NOSIGNAL);
-		free(data.response);
+		if (send_response(&data, client->socket))
+			return (NULL);
 	}
 	return (NULL);
 }
